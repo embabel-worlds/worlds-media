@@ -28,7 +28,8 @@ Each cut is a GitHub release of this repository. Its tag is the cut's id, the vi
 | `linkedin.txt` | The LinkedIn post to go with it |
 
 Release files aren't in the repository's history, so it stays small however many cuts there are. `videos.json` lists
-the cuts, which one the site shows by default (`current`), and each one's YouTube id once it has one.
+the cuts, which one the site shows by default (`current`), each one's title and length, the line the site shows under
+the player (`summary`), and its YouTube id once it has one.
 
 ## Publishing a cut
 
