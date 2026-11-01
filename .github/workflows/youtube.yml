@@ -1,0 +1,62 @@
+# Uploads each new cut to YouTube when its release is published, and records the video's id in videos.json.
+#
+# The release's tag is the cut's id, which videos.json must already list. A cut that already has a YouTube id is
+# skipped, so republishing never uploads twice. Until the three YOUTUBE_ secrets are set (scripts/youtube-auth.mjs sets
+# them), the job says so and stops. Until Google has audited the API project, YouTube makes every upload private: switch
+# it to unlisted or public in YouTube Studio (see the README).
+name: YouTube upload
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release (the cut's id) to upload
+        required: true
+
+concurrency:
+  group: youtube
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Check for the YouTube secrets
+        id: creds
+        env:
+          REFRESH: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$REFRESH" ]; then
+            echo "::notice::No YouTube secrets yet, so nothing is uploaded: run scripts/youtube-auth.mjs (see the README)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload the cut
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: node scripts/youtube-upload.mjs "${{ github.event.release.tag_name || inputs.tag }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the video's id
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          git diff --quiet videos.json && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "${{ github.event.release.tag_name || inputs.tag }} is on YouTube" videos.json
+          git push -q origin HEAD:main
