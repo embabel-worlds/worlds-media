@@ -24,8 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
+      # main, not the release's tag: videos.json is committed back to main, which may have moved on since the tag.
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
@@ -50,13 +55,18 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        run: node scripts/youtube-upload.mjs "${{ github.event.release.tag_name || inputs.tag }}" | tee -a "$GITHUB_STEP_SUMMARY"
+        # bash with pipefail, so a failed upload fails the job rather than passing through tee.
+        shell: bash
+        run: node scripts/youtube-upload.mjs "$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Even when a later step of the upload failed: once the video is on YouTube, its id is recorded, so a rerun
+      # doesn't upload it again.
       - name: Record the video's id
-        if: steps.creds.outputs.configured == 'true'
+        if: ${{ !cancelled() && steps.creds.outputs.configured == 'true' }}
         run: |
           git diff --quiet videos.json && exit 0
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "${{ github.event.release.tag_name || inputs.tag }} is on YouTube" videos.json
+          git commit -q -m "$TAG is on YouTube" videos.json
+          git pull -q --rebase origin main
           git push -q origin HEAD:main

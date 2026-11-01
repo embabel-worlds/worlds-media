@@ -71,6 +71,9 @@ const uploaded = await (await ok(await fetch(started.headers.get('location'), {
     method: 'PUT', headers: { ...auth, 'Content-Type': 'video/mp4' }, body: readFileSync(master),
 }), 'the video')).json();
 console.log(`  uploaded: https://youtu.be/${uploaded.id} (${uploaded.status?.privacyStatus})`);
+/* Recorded at once, so that if the captions fail the workflow still commits the id and a rerun doesn't upload again. */
+video.youtube = uploaded.id;
+writeFileSync(join(ROOT, 'videos.json'), `${JSON.stringify(list, null, 4)}\n`);
 
 /* The captions, as their own track rather than YouTube's automatic ones. */
 const boundary = `cut-${Date.now()}`;
@@ -89,6 +92,4 @@ const thumbnail = await fetch(`https://www.googleapis.com/upload/youtube/v3/thum
 });
 console.log(thumbnail.ok ? '  thumbnail set' : `::warning::The thumbnail wasn't set (${thumbnail.status}): is the channel verified?`);
 
-video.youtube = uploaded.id;
-writeFileSync(join(ROOT, 'videos.json'), `${JSON.stringify(list, null, 4)}\n`);
 console.log(`  videos.json: ${tag} is https://youtu.be/${uploaded.id}`);

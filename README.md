@@ -44,7 +44,10 @@ It adds the cut to `videos.json` here and publishes its release with all the fil
 
 1. **YouTube.** Publishing the release starts `.github/workflows/youtube.yml`, which uploads the master as an unlisted
    video, with its title, description, chapters, tags, captions and thumbnail, and records the video's id in
-   `videos.json`. A cut already on YouTube is never uploaded again.
+   `videos.json`. A cut already on YouTube is never uploaded again. Until Google has audited our API project (see
+   "Setting up the YouTube upload"), YouTube keeps every video the job uploads private, so upload public cuts by hand
+   until then: the release has the master, captions, thumbnail and `youtube.txt`, and adding the id to `videos.json`
+   tells the job to leave that cut alone.
 2. **The site** fetches every cut in `videos.json` when it builds, so the next deploy has it (a push to worlds-landing,
    or its daily rebuild). Without `?v=` the page plays the current cut; `worlds.embabel.com/?v=<id>#watch` plays any
    other, for trying a cut or sharing one.
@@ -53,7 +56,7 @@ It adds the cut to `videos.json` here and publishes its release with all the fil
 
 | Where | What | How |
 | --- | --- | --- |
-| YouTube | The upload the job made | Check it in YouTube Studio, then set it to Public. Until our API project is audited, YouTube makes it private first: set it to Unlisted or Public there. |
+| YouTube | The upload the job made | Check it in YouTube Studio, then set it to Public. Until our API project is audited, the job's uploads stay private: upload by hand instead (see "Publishing a cut"). |
 | LinkedIn | `linkedin.mp4` and `linkedin.txt` | Upload the video natively, as a post with `linkedin.txt` as its text: LinkedIn shows native video to far more people than a link. Tag the colleagues it names. |
 | The site | `worlds.embabel.com/?v=<id>#watch` | Links straight to a cut, in our own player at full quality. |
 | Discord, email | The YouTube link | It previews everywhere, plays anywhere and counts views. |
@@ -72,8 +75,8 @@ Once, by someone who owns the YouTube channel:
    the channel's owner and allow it. It saves the client and the sign-in as this repository's secrets with `gh`,
    without printing them.
 5. **Verify the channel** (youtube.com/verify, a phone number) so the job can set custom thumbnails.
-6. **Ask for the API audit** (Google's "YouTube API Services - Audit and Quota Extension Form"). Until Google has
-   audited the project, YouTube makes every video it uploads private. The audit takes days to weeks; meanwhile,
-   switch each upload to Unlisted or Public by hand.
+6. **Ask for the API audit** (Google's "YouTube API Services - Audit and Quota Extension Form"). Google's documentation
+   says videos uploaded from an unaudited project are restricted to private, and the audit is what lifts that; it
+   takes days to weeks. Until it passes, upload public cuts by hand.
 
-The job can upload about six cuts a day on YouTube's default quota.
+A few cuts a day is well within YouTube's default API quota.
