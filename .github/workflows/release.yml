@@ -1,0 +1,91 @@
+# Release a cut: the button that ships a cut in review (Actions, "Release a cut", Run workflow, with its id).
+#
+# A cut in review is a draft release, put there by `npm run video:publish -- <name>` in worlds-landing. This publishes
+# the release, lists the cut in videos.json (a new cut of the video on the site's home page takes its place there; tick
+# "home" to put another video there), puts it on YouTube, and updates the catalog in the README. The site has it at its
+# next build.
+#
+# YouTube: a cut not yet there is uploaded unlisted, with its captions and thumbnail, and its id recorded; a new cut of
+# one already there (its captions redone) replaces that video's captions. Until the three YOUTUBE_ secrets are set
+# (scripts/youtube-auth.mjs), that step says so and is skipped, and until Google has audited the API project, YouTube
+# keeps every upload private (see the README).
+name: Release a cut
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: The cut's id, as the catalog's "In review" lists it
+        required: true
+      home:
+        description: Put this video on the site's home page (a new cut of the video already there goes there anyway)
+        type: boolean
+        default: false
+
+# One run per cut; cuts ship side by side, each change to main made again on top of the others (scripts/on-main.sh).
+concurrency:
+  group: release-${{ inputs.id }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ID: ${{ inputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Commit as the workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      # Published first, so that when videos.json lists the cut its files are already there for the site to fetch.
+      - name: Publish the release
+        run: |
+          state=$(gh release view "$ID" --json isDraft --jq .isDraft) || { echo "::error::There is no cut $ID: check its id in the catalog."; exit 1; }
+          if [ "$state" = true ]; then gh release edit "$ID" --draft=false; fi
+
+      - name: List it in videos.json
+        run: scripts/on-main.sh "$ID is released" videos.json node scripts/release.mjs "$ID" ${{ inputs.home && '--home' || '' }}
+
+      - name: Check for the YouTube secrets
+        id: creds
+        env:
+          REFRESH: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$REFRESH" ]; then
+            echo "::notice::No YouTube secrets yet, so $ID isn't on YouTube: run scripts/youtube-auth.mjs (see the README), then the YouTube workflow with $ID."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Put it on YouTube
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        # bash with pipefail, so a failed upload fails the job rather than passing through tee.
+        shell: bash
+        run: node scripts/youtube-upload.mjs "$ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Even when the upload failed partway: once the video is on YouTube its id is in videos.json here, and is recorded
+      # on main, so a retry doesn't upload it again. And the catalog, whatever happened above. release.mjs runs only to
+      # record an id: run without one, it would list the cut even when publishing it failed, and it was still a draft.
+      - name: Record the YouTube id and update the catalog
+        if: ${{ !cancelled() }}
+        run: |
+          youtube=$(jq -r --arg id "$ID" '.videos[] | select(.id == $id) | .youtube // empty' videos.json)
+          scripts/on-main.sh "$ID: the catalog" "videos.json README.md" \
+            bash -c '{ [ -z "$0" ] || node scripts/release.mjs "$ID" --youtube "$0"; } && node scripts/catalog.mjs' "$youtube"

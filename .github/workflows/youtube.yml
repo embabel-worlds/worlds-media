@@ -1,22 +1,22 @@
-# Uploads each new cut to YouTube when its release is published, and records the video's id in videos.json.
+# Puts one released cut on YouTube again, by hand (Actions, "YouTube upload", Run workflow, with its id): for when the
+# release workflow's YouTube step failed, or ran before the YouTube secrets were set. Shipping a cut does this itself
+# (.github/workflows/release.yml).
 #
-# The release's tag is the cut's id, which videos.json must already list. A cut that already has a YouTube id is
-# skipped, so republishing never uploads twice. Until the three YOUTUBE_ secrets are set (scripts/youtube-auth.mjs sets
+# A cut not yet on YouTube is uploaded and its id recorded in videos.json; a new cut of a video already there replaces
+# its captions (scripts/youtube-upload.mjs). Until the three YOUTUBE_ secrets are set (scripts/youtube-auth.mjs sets
 # them), the job says so and stops. Until Google has audited the API project, YouTube keeps every upload private, so
 # upload public cuts by hand until then (see the README).
 name: YouTube upload
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: The release (the cut's id) to upload
+        description: The cut's id, as the catalog lists it
         required: true
 
 concurrency:
-  group: youtube
+  group: youtube-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: write
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      TAG: ${{ inputs.tag }}
     steps:
       # main, not the release's tag: videos.json is committed back to main, which may have moved on since the tag.
       - uses: actions/checkout@v4
@@ -59,14 +59,16 @@ jobs:
         shell: bash
         run: node scripts/youtube-upload.mjs "$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Even when a later step of the upload failed: once the video is on YouTube, its id is recorded, so a rerun
-      # doesn't upload it again.
+      # Even when a later step of the upload failed: once the video is on YouTube its id is in videos.json here, and is
+      # recorded on main, so a rerun doesn't upload it again.
       - name: Record the video's id
         if: ${{ !cancelled() && steps.creds.outputs.configured == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git diff --quiet videos.json && exit 0
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "$TAG is on YouTube" videos.json
-          git pull -q --rebase origin main
-          git push -q origin HEAD:main
+          youtube=$(jq -r --arg id "$TAG" '.videos[] | select(.id == $id) | .youtube // empty' videos.json)
+          [ -n "$youtube" ] || exit 0
+          scripts/on-main.sh "$TAG is on YouTube" "videos.json README.md" \
+            bash -c 'node scripts/release.mjs "$TAG" --youtube "$0" && node scripts/catalog.mjs' "$youtube"

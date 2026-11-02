@@ -1,0 +1,39 @@
+# Keeps the catalog in the README up to date (scripts/catalog.mjs): when videos.json changes on main, when a cut is put
+# up for review (`npm run video:publish` in worlds-landing starts this, as a draft release starts nothing by itself),
+# and by hand. The release workflow updates it too, as it ships each cut.
+name: Catalog
+
+on:
+  push:
+    branches: [main]
+    paths: [videos.json]
+  workflow_dispatch:
+
+# A newer run writes the whole catalog afresh, so it replaces one still running.
+concurrency:
+  group: catalog
+  cancel-in-progress: true
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Commit as the workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Write the catalog
+        run: scripts/on-main.sh "The catalog" README.md node scripts/catalog.mjs

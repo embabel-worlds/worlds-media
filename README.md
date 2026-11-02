@@ -13,7 +13,7 @@ they don't belong in the site's history. Here they aren't in git at all.
 ## A cut is a release
 
 Each cut is a GitHub release of this repository. Its tag is the cut's id, the video's name and the day it was cut:
-`north-star-2026-11-01`. Its files:
+`north-star-2026-11-01`. A draft release is a cut in review; a published one is released. Its files:
 
 | File | For |
 | --- | --- |
@@ -26,37 +26,65 @@ Each cut is a GitHub release of this repository. Its tag is the cut's id, the vi
 | `youtube.txt` | YouTube's title, description, chapters and tags |
 | `linkedin.mp4` | LinkedIn: the master with the captions burned in, as LinkedIn plays video muted |
 | `linkedin.txt` | The LinkedIn post to go with it |
+| `cut.json` | What the cut is: its video, title, length, the line under the player, and the version of the video's folder in worlds-landing it was made from (its git tree) |
 
 Release files aren't in the repository's history, so it stays small however many cuts there are. `videos.json` lists
-the cuts, which one the site shows by default (`current`), each one's title and length, the line the site shows under
-the player (`summary`), and its YouTube id once it has one.
+the released cuts, which one the site's home page shows (`current`), and each one's video, title and length, the line
+the site shows under the player (`summary`), and its YouTube id once it has one.
 
-## Publishing a cut
+## Making, reviewing and shipping a cut
 
-From worlds-landing, after `npm run video -- --final`:
+Videos are made in worlds-landing, one folder each in `videos/` (its README has the details). Then:
 
-```sh
-npm run video:publish                      # north-star-<today>, and the site's default from now on
-npm run video:publish -- north-star-test   # another id; add --not-current to leave the default alone
-```
+1. **Up for review.** `npm run video:publish -- <name>` there uploads a `--final` build as a draft release here,
+   `<name>-<today>`. Only people with access to this repository can see a draft, and nothing reads it: not the site,
+   not YouTube. The catalog below lists it under "In review".
+2. **Review.** In worlds-landing, `npm run review -- <cut id>` downloads it and opens it on your local site, captions
+   and all.
+3. **Ship.** Run [Release a cut](../../actions/workflows/release.yml) (Actions, Release a cut, Run workflow) with its
+   id. It publishes the release, lists the cut in `videos.json`, puts it on YouTube and updates the catalog. A new cut
+   of the video on the site's home page takes its place there; tick "home" to put a different video there.
+   Ship as many cuts at once as you like: each run makes its change on the latest `main` and tries again if another
+   pushed first (`scripts/on-main.sh`). A release that failed or was stopped is safe to run again: each step skips
+   what is already done.
+4. **The site** fetches every cut in `videos.json` when it builds, so its next deploy has it (a push to worlds-landing,
+   or its daily rebuild). `worlds.embabel.com/?v=<id>#watch` plays any cut, for trying one or sharing it.
 
-It adds the cut to `videos.json` here and publishes its release with all the files above. Then:
+**YouTube.** A cut not yet on YouTube is uploaded unlisted, with its title, description, chapters, tags, captions and
+thumbnail, and its id is recorded in `videos.json`, so it is never uploaded twice. A new cut of a published one with
+only its captions redone (`npm run video:recut -- <cut id>` in worlds-landing) keeps its YouTube video, and shipping it
+replaces that video's captions. Until the YouTube secrets are set (see "Setting up the YouTube upload") that step is
+skipped; once they are, [YouTube upload](../../actions/workflows/youtube.yml) puts a released cut there. Until Google
+has audited our API project, YouTube keeps every video the job uploads private, so upload public cuts by hand until
+then: the release has the master, captions, thumbnail and `youtube.txt`, and adding the id to `videos.json` tells the
+job to leave that cut alone.
 
-1. **YouTube.** Publishing the release starts `.github/workflows/youtube.yml`, which uploads the master as an unlisted
-   video, with its title, description, chapters, tags, captions and thumbnail, and records the video's id in
-   `videos.json`. A cut already on YouTube is never uploaded again. Until Google has audited our API project (see
-   "Setting up the YouTube upload"), YouTube keeps every video the job uploads private, so upload public cuts by hand
-   until then: the release has the master, captions, thumbnail and `youtube.txt`, and adding the id to `videos.json`
-   tells the job to leave that cut alone.
-2. **The site** fetches every cut in `videos.json` when it builds, so the next deploy has it (a push to worlds-landing,
-   or its daily rebuild). Without `?v=` the page plays the current cut; `worlds.embabel.com/?v=<id>#watch` plays any
-   other, for trying a cut or sharing one.
+<!-- catalog -->
+## Catalog
+
+Written by `scripts/catalog.mjs`: don't edit it by hand.
+
+### In review
+
+Nothing in review.
+
+### Released
+
+#### What if AI had a north star? (`north-star`)
+
+Understanding, purpose, agency: how a world gives your AI one.
+
+| Cut | Length | | Site | YouTube | LinkedIn | Files |
+| --- | --- | --- | --- | --- | --- | --- |
+| `north-star-2026-11-01` | 2:01 | **current** | [watch](https://worlds.embabel.com/?v=north-star-2026-11-01#watch) | [hJbGo-2TSt8](https://youtu.be/hJbGo-2TSt8) | [video](https://github.com/embabel-worlds/worlds-media/releases/download/north-star-2026-11-01/linkedin.mp4), [post](https://github.com/embabel-worlds/worlds-media/releases/download/north-star-2026-11-01/linkedin.txt) | [release](https://github.com/embabel-worlds/worlds-media/releases/tag/north-star-2026-11-01) |
+
+<!-- /catalog -->
 
 ## Sharing a cut
 
 | Where | What | How |
 | --- | --- | --- |
-| YouTube | The upload the job made | Check it in YouTube Studio, then set it to Public. Until our API project is audited, the job's uploads stay private: upload by hand instead (see "Publishing a cut"). |
+| YouTube | The upload the job made | Check it in YouTube Studio, then set it to Public. Until our API project is audited, the job's uploads stay private: upload by hand instead (see "Making, reviewing and shipping a cut"). |
 | LinkedIn | `linkedin.mp4` and `linkedin.txt` | Upload the video natively, as a post with `linkedin.txt` as its text: LinkedIn shows native video to far more people than a link. Tag the colleagues it names. |
 | The site | `worlds.embabel.com/?v=<id>#watch` | Links straight to a cut, in our own player at full quality. |
 | Discord, email | The YouTube link | It previews everywhere, plays anywhere and counts views. |
